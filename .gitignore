@@ -1,0 +1,51 @@
+-- list MRTI in peter directory
+select * from (
+select 
+CASE WHEN prelitt.LITTDate is not NULL THEN 'BrainData' ELSE 'Unknown' END as Anatomy,
+group_concat( CASE WHEN cl.MRTIMagnitudeFlag=1 THEN qa.CodeKey   END) as QACode,
+group_concat( CASE WHEN cl.MRTIMagnitudeFlag=1 THEN qa.CodeValue END) as QAComment,
+group_concat(distinct se.seriesDescription) as SeriesDescription,
+pt.mrn as MRN, REPLACE(sd.studyDate, '-', '') as StudyDate,
+CONCAT('/FUS4/IPVL_research/', pt.mrn, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID, '/') as rootdir,
+group_concat( CASE WHEN cl.PrePreFlag       =1 THEN se.seriesInstanceUID END) as 'Pre.pre.raw',
+group_concat( CASE WHEN cl.PrePstFlag       =1 THEN se.seriesInstanceUID END) as 'Pre.pst.raw',
+group_concat( CASE WHEN cl.fiberFlag        =1 THEN se.seriesInstanceUID END) as 'Fib.raw',
+group_concat( CASE WHEN cl.PstPreFlag       =1 THEN se.seriesInstanceUID END) as 'Pst.pre.raw',
+group_concat( CASE WHEN cl.PstPstFlag       =1 THEN se.seriesInstanceUID END) as 'Pst.pst.raw',
+group_concat( CASE WHEN cl.MRTIMagnitudeFlag=1 THEN se.seriesInstanceUID END) as MRTIMag,
+group_concat( CASE WHEN cl.MRTIPhaseFlag    =1 THEN se.seriesInstanceUID END) as MRTIPhase,
+group_concat( CASE WHEN cl.PrePreFlag       =1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as 'MovePre.pre.raw',
+group_concat( CASE WHEN cl.PrePstFlag       =1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as 'MovePre.pst.raw',
+group_concat( CASE WHEN cl.fiberFlag        =1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as 'MoveFib.raw',
+group_concat( CASE WHEN cl.PstPreFlag       =1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as 'MovePst.pre.raw',
+group_concat( CASE WHEN cl.PstPstFlag       =1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as 'MovePst.pst.raw',
+group_concat( CASE WHEN cl.MRTIMagnitudeFlag=1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as MoveMRTIMag,
+group_concat( CASE WHEN cl.MRTIPhaseFlag    =1 THEN CONCAT('movescu -v -S -k 0008,0052=SERIES -aet ipvl_research -aec Stentor_QRP 192.168.5.55 107 -k 0020,000d=', sd.studyInstanceUID, ' -k 0020,000e=', se.seriesInstanceUID)      END) as MoveMRTIPhase,
+CAST(group_concat( CASE WHEN cl.fiberFlag        =1 THEN CONCAT('/FUS4/data2/github/PatientSpecificPlanningLITT/Code/LITTDatabase/SetupFiles/', pt.mrn, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID,'/', se.seriesInstanceUID,'/laserposition.nii.gz') END) AS CHAR) as laserposition,
+CAST(group_concat( CASE WHEN cl.fiberFlag        =1 THEN CONCAT('/FUS4/data2/github/PatientSpecificPlanningLITT/Code/LITTDatabase/SetupFiles/', pt.mrn, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID,'/', se.seriesInstanceUID,'/simulationroi.nii.gz') END) AS CHAR)as simulationroi,
+CAST(group_concat( CASE WHEN cl.fiberFlag        =1 THEN se.numberOfImages    END) AS CHAR) as NumberImagesFiber,
+group_concat( CASE WHEN cl.MRTIPhaseFlag    =1 THEN lg.PowerHistory      END) as PowerHistory,
+prelitt.*
+from DICOMHeaders.patients         pt 
+     join DICOMHeaders.studies     sd  on sd.patientsID=pt.patientsID
+     join DICOMHeaders.series      se  on sd.studiesID =se.studiesID
+     join Metadata.flags           cl  on cl.seriesID  =se.seriesID 
+     join Metadata.SeriesQA        qa  on qa.seriesID  =se.seriesID 
+left join Metadata.VlaseLogFiles   lg  on lg.seriesID  =se.seriesID
+left join( -- pre LITT sub query for segmentation data
+          select  md.PatientsUID, md.LITTStudyID,md.LITTDate, sd.StudyDate as PreLITTStudyDate, 
+          CONCAT(md.PatientsUID, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID ) as relativelocation,
+          CONCAT('http://10.115.8.182/fuentes/ImagingDB/'                ,md.PatientsUID, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID ) as dblocation,
+          CONCAT('/rsrch1/ip/dtfuentes/github/DataServices/Process/brats/',md.PatientsUID, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID ) as mntlocation,
+          CONCAT('/FUS4/IPVL_research/',md.PatientsUID, '/', REPLACE(sd.studyDate, '-', ''),'/',sd.studyInstanceUID ) as prelittdcmlocation,
+          sf.T1SeriesUID, sf.T2SeriesUID, sf.TCSeriesUID, sf.FLSeriesUID, sf.studyInstanceUID as PreLITTstudyInstanceUID , 
+          sf.SeriesIDT1, sf.SeriesIDT2, sf.SeriesIDTC, sf.SeriesIDFL, 
+          sf.patientsID as anonmrn, sf.studiesID as anonprelittstudy
+          from  Metadata.MetaData       md
+          join  DICOMHeaders.studies    sd  on sd.studiesID = md.PreLITTStudyID 
+          join  Metadata.bratstudyflags sf  on sd.studiesID = sf.studiesID 
+          where md.dataid = 'mrglitt'
+         ) prelitt on prelitt.LITTStudyID=sd.studiesID 
+group by cl.mrtiID
+order by pt.mrn,sd.StudyDate
+) t1  where t1.MRTIMag is not NULL and t1.MRTIPhase is not NULL;
